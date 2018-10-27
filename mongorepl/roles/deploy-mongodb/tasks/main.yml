@@ -1,0 +1,83 @@
+---
+- name: changinging the rack dc prrperties
+  template:
+    src: mongodb-org-3.6.repo
+    dest: /etc/yum.repos.d/
+    owner: root
+    group: root
+    mode: 0777
+
+
+- name: Install mongodb
+  yum:
+    name: mongodb-org
+    state: present
+
+#- name: Enable the cassandra
+#  service:
+#    name: mongod
+#    enabled: yes
+#    state: started
+
+- name: copy mongodconf file
+  template:
+    src: mongod.conf
+    dest: /etc/
+    owner: root
+    group: root
+    mode: 0766
+
+- name: new ip
+  command: hostname -i
+  register: command_output
+
+- set_fact: 
+    ipaddress: "{{ command_output.stdout }}"
+
+- debug: 
+   msg: "{{ command_output.stdout }}"
+
+- name: replace listen_addess localhost to local ip
+  lineinfile:
+    state: present
+    dest: /etc/mongod.conf
+    regexp: '^#?  bindIp:'
+    line: '  bindIp: {{ command_output.stdout }},127.0.0.1'
+
+- name: Creates directory
+  file:
+    path: /opt/mongo
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+
+
+- name: changinging the rack dc prrperties
+  template:
+    src: mongo-keyfile
+    dest: /opt/mongo
+    owner: mongod
+    group: mongod
+    mode: 0400
+
+
+- name: Enable the cassandra
+  service:
+    name: mongod
+    state: started
+
+- name: wait for mongod port
+  wait_for:
+    port: 27017
+    delay: 5
+
+- name: rs initiate  file
+  template:
+    src: initfile.js 
+    dest: /tmp/
+- block: 
+  - name:  replica set execute
+    shell: mongo --port 27017 < /tmp/initfile.js
+  delegate_to: "{{ groups.all[0] }}"
+  run_once: true
